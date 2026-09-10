@@ -37,7 +37,7 @@ class MultiPairArbitrageScanner:
         gas_price_wei = self.multicall.w3.eth.gas_price
         gas_price_gwei = self.multicall.w3.from_wei(gas_price_wei, "gwei")
 
-        # Stima prezzo ETH e costo gas operazione
+        # Prezzo ETH di riferimento e costo gas
         eth_price_usd = 2465.0
         gas_cost_usd = (ESTIMATED_GAS_UNITS * gas_price_wei / 10**18) * eth_price_usd
 
@@ -76,11 +76,11 @@ class MultiPairArbitrageScanner:
             fees_pct = (buy_pool["fee_bps"] + sell_pool["fee_bps"]) / 100.0
             net_pct = gross_pct - fees_pct
 
-            # Simulazione trade reale se entrambe sono V2
-            sim_net_usd = 0.0
+            # Calcolo stima profitto netto reale in USD
             sim_capital = DEFAULT_SIMULATION_USD
 
             if buy_pool["type"] == "v2" and sell_pool["type"] == "v2":
+                # Entrambe V2: calcolo analitico x*y=k esatto
                 if pair["is_quote_eth"]:
                     quote_in_float = sim_capital / eth_price_usd
                 else:
@@ -106,8 +106,11 @@ class MultiPairArbitrageScanner:
                 diff_quote = diff_raw / (10**pair["quote_decimals"])
                 diff_usd = diff_quote * eth_price_usd if pair["is_quote_eth"] else diff_quote
                 sim_net_usd = diff_usd - gas_cost_usd
+            else:
+                # Almeno una pool è V3 / Slipstream: stima dal net_pct
+                sim_net_usd = (sim_capital * (net_pct / 100.0)) - gas_cost_usd
 
-            is_profitable = (net_pct > 0 and (sim_net_usd > 0 or buy_pool["type"] != "v2"))
+            is_profitable = (net_pct > 0 and sim_net_usd > 0)
 
             pair_res = {
                 "pair": pair["name"],
@@ -126,7 +129,7 @@ class MultiPairArbitrageScanner:
             }
             results.append(pair_res)
 
-            # Salva sempre nel database e nei file CSV per analisi
+            # Salva sempre nel database
             self.db.record_tick(block_number, gas_price_gwei, gas_cost_usd, pair_res)
 
             if is_profitable:
@@ -144,7 +147,7 @@ class MultiPairArbitrageScanner:
         print("=" * 88)
         print("     ARBITRAGE BOT -- SCANNER MULTI-COPPIA AD ALTA FREQUENZA (BASE L2)")
         print("     Dati salvati automaticamente in data/market_history.db e CSV")
-        print(f"     4 Coppie Volatili in Ascolto Attivo | Polling ogni {POLL_INTERVAL_SECONDS}s")
+        print(f"     8 Coppie No-Meme in Ascolto Attivo | Polling ogni {POLL_INTERVAL_SECONDS}s")
         print("=" * 88)
 
         last_block = 0
@@ -164,12 +167,12 @@ class MultiPairArbitrageScanner:
                             print(f"  Coppia: {a['pair']} | Compra su {a['buy_dex']} -> Vendi su {a['sell_dex']}")
                             print(f"  Spread Lordo: {a['gross_pct']:+.3f}% | Netto Teorico: {a['net_pct']:+.3f}%")
                             if a["sim_profit_usd"] > 0:
-                                print(f"  Guadagno Netto Stimato: +${a['sim_profit_usd']:.4f} USD (Trade da ${a['sim_capital_usd']:.0f})")
+                                print(f"  Guadagno Netto Stimato: +${a['sim_profit_usd']:.4f} USD (Trade simulato da ${a['sim_capital_usd']:.0f})")
                         print("#" * 88 + "\n")
 
                     print(f"[{t_str}] Blocco #{curr_block} | Gas: {data['gas_price_gwei']:.4f} Gwei (${data['gas_cost_usd']:.4f}/tx)")
                     for r in data["pairs"]:
-                        p_format = ".4f" if r["quote"] == "USDC" else ".8f"
+                        p_format = ".2f" if "USDC" in r["pair"] and "cbBTC" in r["pair"] else (".4f" if "USDC" in r["pair"] else ".8f")
                         net_sign = "+" if r["net_pct"] > 0 else ""
                         status_flag = "[PROFITTO!]" if r["is_profitable"] else "[attesa]"
                         print(
