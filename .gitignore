@@ -1,0 +1,31 @@
+# File Checklist Interna (Privata)
+testo.txt
+CHECKLIST.md
+
+# Ambiente Virtuale Python
+.venv/
+venv/
+ENV/
+
+# Bytecode e Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Dati e Log di runtime
+data/
+*.log
+
+# Variabili d'ambiente e segreti
+.env
+.env.*
+
+# IDE e Editor
+.vscode/
+.idea/
+
+# Node
+node_modules/
+dist/
+build/
