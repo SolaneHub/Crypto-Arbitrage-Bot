@@ -40,8 +40,9 @@ class PoolDecoder:
                 if r_base <= 0 or r_quote <= 0:
                     return None
 
-                # Prezzo in unità di quote per 1 unità di base
                 price = r_quote / r_base
+                if price <= 0 or price > 1e12 or price < 1e-12:
+                    return None
 
                 return {
                     "dex": pool_cfg["name"],
@@ -55,19 +56,27 @@ class PoolDecoder:
                 }
 
             elif p_type == "v3":
-                # Uniswap V3: 7 campi
-                sqrtPriceX96 = decode(
-                    ["uint160", "int24", "uint16", "uint16", "uint16", "uint8", "bool"],
-                    return_data
-                )[0]
+                # Uniswap V3 (uint8) oppure PancakeSwap V3 (uint32)
+                try:
+                    sqrtPriceX96 = decode(
+                        ["uint160", "int24", "uint16", "uint16", "uint16", "uint8", "bool"],
+                        return_data
+                    )[0]
+                except Exception:
+                    sqrtPriceX96 = decode(
+                        ["uint160", "int24", "uint16", "uint16", "uint16", "uint32", "bool"],
+                        return_data
+                    )[0]
+
                 raw_ratio = (sqrtPriceX96 / (2**96)) ** 2
 
                 if t0_is_base:
-                    # token0=base, token1=quote -> raw_ratio = quote_raw / base_raw
                     price = raw_ratio * (10**(base_dec - quote_dec))
                 else:
-                    # token0=quote, token1=base -> raw_ratio = base_raw / quote_raw
                     price = (1.0 / raw_ratio) * (10**(base_dec - quote_dec))
+
+                if price <= 0 or price > 1e12 or price < 1e-12:
+                    return None
 
                 return {
                     "dex": pool_cfg["name"],
@@ -89,6 +98,9 @@ class PoolDecoder:
                 else:
                     price = (1.0 / raw_ratio) * (10**(base_dec - quote_dec))
 
+                if price <= 0 or price > 1e12 or price < 1e-12:
+                    return None
+
                 return {
                     "dex": pool_cfg["name"],
                     "type": "slipstream",
@@ -101,7 +113,6 @@ class PoolDecoder:
 
     @staticmethod
     def get_amount_out_v2(amount_in: int, reserve_in: int, reserve_out: int, fee_bps: int = 30) -> int:
-        """Calcolo esatto Uniswap V2 x * y = k con commissione"""
         if amount_in <= 0 or reserve_in <= 0 or reserve_out <= 0:
             return 0
         amount_in_with_fee = amount_in * (10000 - fee_bps)
