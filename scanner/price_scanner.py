@@ -1,8 +1,6 @@
-import os
-import csv
 import time
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from config.settings import (
     RPC_ENDPOINTS,
@@ -10,19 +8,18 @@ from config.settings import (
     MONITORED_PAIRS,
     POLL_INTERVAL_SECONDS,
     ESTIMATED_GAS_UNITS,
-    DEFAULT_SIMULATION_USD,
-    LOG_FILE_PROFIT,
-    LOG_FILE_ALL
+    DEFAULT_SIMULATION_USD
 )
 from scanner.multicall import MulticallManager
 from scanner.pools import PoolDecoder
+from scanner.db_logger import MarketDatabase
 
 class MultiPairArbitrageScanner:
     def __init__(self):
         self.multicall = MulticallManager(RPC_ENDPOINTS, MULTICALL3_ADDRESS)
         self.pairs_config = MONITORED_PAIRS
+        self.db = MarketDatabase()
         self._init_calls()
-        self._init_csv()
 
     def _init_calls(self):
         self.calls = []
@@ -35,54 +32,13 @@ class MultiPairArbitrageScanner:
                     "callData": PoolDecoder.get_calldata(p["type"])
                 })
 
-    def _init_csv(self):
-        os.makedirs(os.path.dirname(LOG_FILE_PROFIT), exist_ok=True)
-        if not os.path.exists(LOG_FILE_PROFIT):
-            with open(LOG_FILE_PROFIT, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    "timestamp",
-                    "block_number",
-                    "pair",
-                    "buy_dex",
-                    "buy_price",
-                    "sell_dex",
-                    "sell_price",
-                    "gross_spread_pct",
-                    "fees_pct",
-                    "est_gas_usd",
-                    "net_spread_pct",
-                    "simulated_capital_usd",
-                    "simulated_net_profit_usd"
-                ])
-
-    def _log_profit(self, opp: Dict[str, Any]):
-        with open(LOG_FILE_PROFIT, "a", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                opp["timestamp"],
-                opp["block"],
-                opp["pair"],
-                opp["buy_dex"],
-                f"{opp['buy_price']:.8f}",
-                opp["sell_dex"],
-                f"{opp['sell_price']:.8f}",
-                f"{opp['gross_pct']:.4f}",
-                f"{opp['fees_pct']:.4f}",
-                f"{opp['gas_cost_usd']:.4f}",
-                f"{opp['net_pct']:.4f}",
-                f"{opp['sim_capital_usd']:.2f}",
-                f"{opp['sim_profit_usd']:.4f}"
-            ])
-
     def scan_cycle(self) -> Dict[str, Any]:
         block_number, raw_results = self.multicall.aggregate(self.calls)
         gas_price_wei = self.multicall.w3.eth.gas_price
         gas_price_gwei = self.multicall.w3.from_wei(gas_price_wei, "gwei")
 
-        # Trova prima il prezzo di ETH per calcolare il gas in USD
+        # Stima prezzo ETH e costo gas operazione
         eth_price_usd = 2465.0
-        # Calcolo costo gas per flash loan + 2 swap in USD
         gas_cost_usd = (ESTIMATED_GAS_UNITS * gas_price_wei / 10**18) * eth_price_usd
 
         results = []
@@ -120,13 +76,11 @@ class MultiPairArbitrageScanner:
             fees_pct = (buy_pool["fee_bps"] + sell_pool["fee_bps"]) / 100.0
             net_pct = gross_pct - fees_pct
 
-            # Simulazione analitica se entrambe sono V2
+            # Simulazione trade reale se entrambe sono V2
             sim_net_usd = 0.0
             sim_capital = DEFAULT_SIMULATION_USD
 
             if buy_pool["type"] == "v2" and sell_pool["type"] == "v2":
-                # Calcola trade reale su V2
-                # Converti capitale simulato in quote asset
                 if pair["is_quote_eth"]:
                     quote_in_float = sim_capital / eth_price_usd
                 else:
@@ -134,7 +88,6 @@ class MultiPairArbitrageScanner:
 
                 quote_in_raw = int(quote_in_float * (10**pair["quote_decimals"]))
 
-                # Leg 1: swap quote -> base su buy_pool
                 base_bought = PoolDecoder.get_amount_out_v2(
                     quote_in_raw,
                     buy_pool["r_quote_raw"],
@@ -142,7 +95,6 @@ class MultiPairArbitrageScanner:
                     buy_pool["fee_bps"]
                 )
 
-                # Leg 2: swap base -> quote su sell_pool
                 quote_received = PoolDecoder.get_amount_out_v2(
                     base_bought,
                     sell_pool["r_base_raw"],
@@ -154,6 +106,8 @@ class MultiPairArbitrageScanner:
                 diff_quote = diff_raw / (10**pair["quote_decimals"])
                 diff_usd = diff_quote * eth_price_usd if pair["is_quote_eth"] else diff_quote
                 sim_net_usd = diff_usd - gas_cost_usd
+
+            is_profitable = (net_pct > 0 and (sim_net_usd > 0 or buy_pool["type"] != "v2"))
 
             pair_res = {
                 "pair": pair["name"],
@@ -168,19 +122,15 @@ class MultiPairArbitrageScanner:
                 "gas_cost_usd": gas_cost_usd,
                 "sim_capital_usd": sim_capital,
                 "sim_profit_usd": sim_net_usd,
-                "is_profitable": (net_pct > 0 and (sim_net_usd > 0 or buy_pool["type"] != "v2"))
+                "is_profitable": is_profitable
             }
             results.append(pair_res)
 
-            if pair_res["is_profitable"] or net_pct > 0.05:
-                opp_log = {
-                    "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-                    "block": block_number,
-                    **pair_res
-                }
-                if pair_res["is_profitable"]:
-                    self._log_profit(opp_log)
-                    profitable_alerts.append(pair_res)
+            # Salva sempre nel database e nei file CSV per analisi
+            self.db.record_tick(block_number, gas_price_gwei, gas_cost_usd, pair_res)
+
+            if is_profitable:
+                profitable_alerts.append(pair_res)
 
         return {
             "block": block_number,
@@ -193,6 +143,7 @@ class MultiPairArbitrageScanner:
     def start_continuous_monitoring(self):
         print("=" * 88)
         print("     ARBITRAGE BOT -- SCANNER MULTI-COPPIA AD ALTA FREQUENZA (BASE L2)")
+        print("     Dati salvati automaticamente in data/market_history.db e CSV")
         print(f"     4 Coppie Volatili in Ascolto Attivo | Polling ogni {POLL_INTERVAL_SECONDS}s")
         print("=" * 88)
 
@@ -206,19 +157,17 @@ class MultiPairArbitrageScanner:
                     last_block = curr_block
                     t_str = datetime.now().strftime("%H:%M:%S")
 
-                    # Banner in caso di profitto netto reale
                     if data["alerts"]:
                         print("\n" + "#" * 88)
                         for a in data["alerts"]:
-                            print(f"  >>> [PROFITTO REALE RILEVATO!] <<<")
+                            print("  >>> [PROFITTO REALE RILEVATO!] <<<")
                             print(f"  Coppia: {a['pair']} | Compra su {a['buy_dex']} -> Vendi su {a['sell_dex']}")
                             print(f"  Spread Lordo: {a['gross_pct']:+.3f}% | Netto Teorico: {a['net_pct']:+.3f}%")
                             if a["sim_profit_usd"] > 0:
-                                print(f"  Simulazione con ${a['sim_capital_usd']:.0f}: Guadagno Netto Effettivo: +${a['sim_profit_usd']:.4f} USD (Gas già detratto)")
+                                print(f"  Guadagno Netto Stimato: +${a['sim_profit_usd']:.4f} USD (Trade da ${a['sim_capital_usd']:.0f})")
                         print("#" * 88 + "\n")
 
-                    # Tabella di monitoraggio compatta
-                    print(f"[{t_str}] Blocco #{curr_block} | Gas: {data['gas_price_gwei']:.4f} Gwei (Gas/Tx: ${data['gas_cost_usd']:.4f})")
+                    print(f"[{t_str}] Blocco #{curr_block} | Gas: {data['gas_price_gwei']:.4f} Gwei (${data['gas_cost_usd']:.4f}/tx)")
                     for r in data["pairs"]:
                         p_format = ".4f" if r["quote"] == "USDC" else ".8f"
                         net_sign = "+" if r["net_pct"] > 0 else ""
@@ -234,4 +183,4 @@ class MultiPairArbitrageScanner:
                 time.sleep(POLL_INTERVAL_SECONDS)
 
         except KeyboardInterrupt:
-            print("\n[!] Scanner interrotto dall'utente.")
+            print("\n[!] Scanner interrotto dall'utente. I dati raccolti sono al sicuro nel database.")
