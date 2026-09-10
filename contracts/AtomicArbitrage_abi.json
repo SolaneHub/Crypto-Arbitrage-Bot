@@ -1,0 +1,407 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "actualProfit",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "requiredProfit",
+        "type": "uint256"
+      }
+    ],
+    "name": "InsufficientProfit",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidCaller",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TransferFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Unauthorized",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "borrowedAsset",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "loanAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "netProfit",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "ArbitrageExecuted",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "AAVE_V3_POOL",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "BALANCER_VAULT",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "UNI_V3_ROUTER",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "borrowedAsset",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "loanAmount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "bridgeAsset",
+            "type": "address"
+          },
+          {
+            "internalType": "enum AtomicArbitrage.DexType",
+            "name": "leg1Dex",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "leg1Target",
+            "type": "address"
+          },
+          {
+            "internalType": "uint24",
+            "name": "leg1V3Fee",
+            "type": "uint24"
+          },
+          {
+            "internalType": "enum AtomicArbitrage.DexType",
+            "name": "leg2Dex",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "leg2Target",
+            "type": "address"
+          },
+          {
+            "internalType": "uint24",
+            "name": "leg2V3Fee",
+            "type": "uint24"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minProfitAmount",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct AtomicArbitrage.ExecutionPlan",
+        "name": "plan",
+        "type": "tuple"
+      }
+    ],
+    "name": "executeAaveFlashArbitrage",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "borrowedAsset",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "loanAmount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "bridgeAsset",
+            "type": "address"
+          },
+          {
+            "internalType": "enum AtomicArbitrage.DexType",
+            "name": "leg1Dex",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "leg1Target",
+            "type": "address"
+          },
+          {
+            "internalType": "uint24",
+            "name": "leg1V3Fee",
+            "type": "uint24"
+          },
+          {
+            "internalType": "enum AtomicArbitrage.DexType",
+            "name": "leg2Dex",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "leg2Target",
+            "type": "address"
+          },
+          {
+            "internalType": "uint24",
+            "name": "leg2V3Fee",
+            "type": "uint24"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minProfitAmount",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct AtomicArbitrage.ExecutionPlan",
+        "name": "plan",
+        "type": "tuple"
+      }
+    ],
+    "name": "executeBalancerFlashArbitrage",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "borrowedAsset",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "loanAmount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "bridgeAsset",
+            "type": "address"
+          },
+          {
+            "internalType": "enum AtomicArbitrage.DexType",
+            "name": "leg1Dex",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "leg1Target",
+            "type": "address"
+          },
+          {
+            "internalType": "uint24",
+            "name": "leg1V3Fee",
+            "type": "uint24"
+          },
+          {
+            "internalType": "enum AtomicArbitrage.DexType",
+            "name": "leg2Dex",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "leg2Target",
+            "type": "address"
+          },
+          {
+            "internalType": "uint24",
+            "name": "leg2V3Fee",
+            "type": "uint24"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minProfitAmount",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct AtomicArbitrage.ExecutionPlan",
+        "name": "plan",
+        "type": "tuple"
+      }
+    ],
+    "name": "executeDirectArbitrage",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "asset",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "premium",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "initiator",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "params",
+        "type": "bytes"
+      }
+    ],
+    "name": "executeOperation",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IERC20[]",
+        "name": "tokens",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "amounts",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "feeAmounts",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "bytes",
+        "name": "userData",
+        "type": "bytes"
+      }
+    ],
+    "name": "receiveFlashLoan",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "rescueETH",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "rescueToken",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "receive"
+  }
+]

@@ -1,6 +1,5 @@
-# File Checklist Interna (Privata)
-testo.txt
-CHECKLIST.md
+# Roadmap Interna Privata
+ROADMAP.md
 
 # Ambiente Virtuale Python
 .venv/
@@ -29,3 +28,6 @@ data/
 node_modules/
 dist/
 build/
+
+# Binari locali
+bin/

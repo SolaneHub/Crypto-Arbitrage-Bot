@@ -1,0 +1,4 @@
+# Dipendenze essenziali per Crypto Arbitrage Bot su Base L2
+web3>=7.0.0
+python-dotenv>=1.0.0
+requests>=2.31.0
