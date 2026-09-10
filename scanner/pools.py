@@ -1,62 +1,110 @@
 from eth_abi import decode
 from typing import Dict, Any, Optional
 
-GET_RESERVES_SIG = bytes.fromhex("0902f1ac")
-SLOT0_SIG = bytes.fromhex("3850c7bd")
+SIG_RESERVES = bytes.fromhex("0902f1ac")
+SIG_SLOT0 = bytes.fromhex("3850c7bd")
 
 class PoolDecoder:
     @staticmethod
     def get_calldata(pool_type: str) -> bytes:
-        if pool_type in ("univ2", "aerodrome"):
-            return GET_RESERVES_SIG
-        elif pool_type == "univ3":
-            return SLOT0_SIG
+        if pool_type == "v2":
+            return SIG_RESERVES
+        elif pool_type in ("v3", "slipstream"):
+            return SIG_SLOT0
         else:
             raise ValueError(f"Tipo pool non supportato: {pool_type}")
 
     @staticmethod
-    def decode_price(pool_config: Dict[str, Any], return_data: bytes) -> Optional[Dict[str, Any]]:
+    def decode_pool_state(
+        pool_cfg: Dict[str, Any],
+        pair_cfg: Dict[str, Any],
+        return_data: bytes
+    ) -> Optional[Dict[str, Any]]:
         if not return_data:
             return None
 
-        pool_type = pool_config["type"]
-        base_symbol = pool_config["base_token"]
-        quote_symbol = pool_config["quote_token"]
+        p_type = pool_cfg["type"]
+        base_dec = pair_cfg["base_decimals"]
+        quote_dec = pair_cfg["quote_decimals"]
+        t0_is_base = pool_cfg["token0_is_base"]
 
         try:
-            if pool_type in ("univ2", "aerodrome"):
+            if p_type == "v2":
                 r0, r1, _ = decode(["uint112", "uint112", "uint32"], return_data)
-                # In BaseSwap e Aerodrome WETH-USDC: token0 = WETH (18 dec), token1 = USDC (6 dec)
-                weth_reserve = r0 / 10**18
-                usdc_reserve = r1 / 10**6
-                
-                if weth_reserve <= 0:
+                r_base_raw = r0 if t0_is_base else r1
+                r_quote_raw = r1 if t0_is_base else r0
+
+                r_base = r_base_raw / (10**base_dec)
+                r_quote = r_quote_raw / (10**quote_dec)
+
+                if r_base <= 0 or r_quote <= 0:
                     return None
-                
-                price = usdc_reserve / weth_reserve
+
+                # Prezzo in unità di quote per 1 unità di base
+                price = r_quote / r_base
+
                 return {
-                    "dex": pool_config["dex"],
-                    "name": pool_config["name"],
+                    "dex": pool_cfg["name"],
+                    "type": "v2",
                     "price": price,
-                    "base_reserve": weth_reserve,
-                    "quote_reserve": usdc_reserve,
-                    "fee_pct": pool_config["fee_pct"]
+                    "r_base_raw": r_base_raw,
+                    "r_quote_raw": r_quote_raw,
+                    "r_base": r_base,
+                    "r_quote": r_quote,
+                    "fee_bps": pool_cfg["fee_bps"]
                 }
 
-            elif pool_type == "univ3":
-                sqrtPriceX96, tick, _, _, _, _, _ = decode(
+            elif p_type == "v3":
+                # Uniswap V3: 7 campi
+                sqrtPriceX96 = decode(
                     ["uint160", "int24", "uint16", "uint16", "uint16", "uint8", "bool"],
                     return_data
-                )
+                )[0]
                 raw_ratio = (sqrtPriceX96 / (2**96)) ** 2
-                # token0 = WETH (18), token1 = USDC (6) -> raw_ratio * 10^12 = USDC per WETH
-                price = raw_ratio * (10**12)
+
+                if t0_is_base:
+                    # token0=base, token1=quote -> raw_ratio = quote_raw / base_raw
+                    price = raw_ratio * (10**(base_dec - quote_dec))
+                else:
+                    # token0=quote, token1=base -> raw_ratio = base_raw / quote_raw
+                    price = (1.0 / raw_ratio) * (10**(base_dec - quote_dec))
+
                 return {
-                    "dex": pool_config["dex"],
-                    "name": pool_config["name"],
+                    "dex": pool_cfg["name"],
+                    "type": "v3",
                     "price": price,
-                    "tick": tick,
-                    "fee_pct": pool_config["fee_pct"]
+                    "fee_bps": pool_cfg["fee_bps"]
                 }
-        except Exception as e:
+
+            elif p_type == "slipstream":
+                # Aerodrome Slipstream: 6 campi
+                sqrtPriceX96 = decode(
+                    ["uint160", "int24", "uint16", "uint16", "uint16", "bool"],
+                    return_data
+                )[0]
+                raw_ratio = (sqrtPriceX96 / (2**96)) ** 2
+
+                if t0_is_base:
+                    price = raw_ratio * (10**(base_dec - quote_dec))
+                else:
+                    price = (1.0 / raw_ratio) * (10**(base_dec - quote_dec))
+
+                return {
+                    "dex": pool_cfg["name"],
+                    "type": "slipstream",
+                    "price": price,
+                    "fee_bps": pool_cfg["fee_bps"]
+                }
+
+        except Exception:
             return None
+
+    @staticmethod
+    def get_amount_out_v2(amount_in: int, reserve_in: int, reserve_out: int, fee_bps: int = 30) -> int:
+        """Calcolo esatto Uniswap V2 x * y = k con commissione"""
+        if amount_in <= 0 or reserve_in <= 0 or reserve_out <= 0:
+            return 0
+        amount_in_with_fee = amount_in * (10000 - fee_bps)
+        numerator = amount_in_with_fee * reserve_out
+        denominator = (reserve_in * 10000) + amount_in_with_fee
+        return numerator // denominator
